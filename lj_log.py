@@ -1,5 +1,5 @@
-# Real-Time AIN Monitor: LabJack T7 + Real Voltage Temp Display
-# Computes AIN1 - AIN0 as the true voltage, converts to temperature, and shows temp in plot legend.
+# Real-Time AIN Monitor: LabJack T7
+# Reads and plots AIN0 and AIN1 magnitudes + their difference in real time.
 
 import time
 import numpy as np
@@ -11,30 +11,6 @@ SAMPLING_INTERVAL = 0.2  # seconds (5 Hz)
 PLOT_WINDOW = 60         # seconds of data to display
 Y_MIN, Y_MAX = -0.5, 3.0  # fixed voltage display range
 # =====================
-
-# --- Chebyshev Voltage-to-Temperature Conversion ---
-a0 = 207.313253
-a1 = -126.180277
-a2 = -3.928505
-a3 = -0.942699
-a4 = -0.215084
-a5 = -0.074933
-a6 = -0.016769
-Zl = 0.4969960998
-Zu = 1.030625219
-
-def cheb_eq(Zv):
-    k = ((Zv - Zl) - (Zu - Zv)) / (Zu - Zl)
-    acos_k = np.arccos(k)
-    return (
-        a0 * np.cos(0 * acos_k) +
-        a1 * np.cos(1 * acos_k) +
-        a2 * np.cos(2 * acos_k) +
-        a3 * np.cos(3 * acos_k) +
-        a4 * np.cos(4 * acos_k) +
-        a5 * np.cos(5 * acos_k) +
-        a6 * np.cos(6 * acos_k)
-    )
 
 # --- Initialize LabJack ---
 handle = ljm.openS("T7", "ANY", "ANY")
@@ -58,11 +34,10 @@ ax.set_ylabel("Voltage (V)")
 ax.set_title("Real-Time Analog Inputs", fontsize=14)
 ax.grid(True)
 
-line1, = ax.plot([], [], label="AIN0", lw=2)
-line2, = ax.plot([], [], label="AIN1", lw=2)
+line1, = ax.plot([], [], label="|AIN0|", lw=2)
+line2, = ax.plot([], [], label="|AIN1|", lw=2)
 line3, = ax.plot([], [], label="|AIN0 - AIN1|", lw=2, linestyle="--")
-legend = ax.legend(loc='upper left')
-plt.tight_layout()
+ax.legend(loc='upper left')
 
 # --- Data Buffers ---
 time_data = []
@@ -77,19 +52,11 @@ try:
         ain0, ain1 = ljm.eReadNames(handle, 2, ["AIN0", "AIN1"])
         now = time.time() - start_time
 
-        # Compute real voltage and temperature
-        real_voltage = ain1 - ain0
-        try:
-            temp_kelvin = cheb_eq(real_voltage)
-            line2.set_label(f"AIN1 - AIN0 (T ≈ {temp_kelvin:.2f} K)")
-        except Exception as e:
-            line2.set_label("AIN1 - AIN0 (T: ERROR)")
-
         # Append data
         time_data.append(now)
-        ain0_data.append(ain0)
-        ain1_data.append(ain1)
-        diff_data.append(abs(ain1 - ain0))
+        ain0_data.append(abs(ain0))
+        ain1_data.append(abs(ain1))
+        diff_data.append(abs(ain0 - ain1))
 
         # Trim old data
         while time_data and (now - time_data[0]) > PLOT_WINDOW:
@@ -104,10 +71,6 @@ try:
         line3.set_data(time_data, diff_data)
         ax.set_xlim(max(0, now - PLOT_WINDOW), now)
         ax.set_ylim(Y_MIN, Y_MAX)
-
-        # Refresh legend
-        legend.remove()
-        legend = ax.legend(loc='upper left')
 
         plt.pause(0.01)
         time.sleep(SAMPLING_INTERVAL)
