@@ -76,6 +76,10 @@ ax2.legend(loc='upper left')
 plt.tight_layout()
 
 # --- Data Buffers ---
+time_data = []
+real_voltage_data = []
+ain1_data = []
+temp_data = []
 start_time = time.time()
 
 # Open CSV files for real-time writing
@@ -101,16 +105,41 @@ try:
         except Exception:
             temp_kelvin = np.nan  # Handle invalid voltage for temperature conversion
 
+        # Append data to buffers
+        time_data.append(now)
+        real_voltage_data.append(real_voltage)
+        ain1_data.append(ain1)
+        temp_data.append(temp_kelvin)
+
         # Write data to CSV in real-time
         voltage_writer.writerow([now, real_voltage, ain1])
         temp_writer.writerow([now, temp_kelvin])
 
-        # Update plots
-        ax1.set_xlim(0, now)  # Autoscale x-axis based on recording time
-        ax2.set_xlim(0, now)
+        # Trim old data to avoid memory overflow
+        if len(time_data) > 1000:  # Keep only the last 1000 points
+            time_data = time_data[-1000:]
+            real_voltage_data = real_voltage_data[-1000:]
+            ain1_data = ain1_data[-1000:]
+            temp_data = temp_data[-1000:]
 
-        line_voltage.set_xdata(np.append(line_voltage.get_xdata(), now))
-        line_voltage.set_ydata(np.append(line_voltage.get_ydata(), real_voltage))
+        # Update plots
+        line_voltage.set_data(time_data, real_voltage_data)
+        line_ain1.set_data(time_data, ain1_data)
+        line_temp.set_data(time_data, temp_data)
+
+        # Autoscale axes with tight windows around the averages
+        if len(real_voltage_data) > 0:
+            avg_voltage = np.mean(real_voltage_data)
+            voltage_margin = max(0.1, 0.1 * (max(real_voltage_data) - min(real_voltage_data)))  # ±10% or minimum margin
+            ax1.set_ylim(avg_voltage - voltage_margin, avg_voltage + voltage_margin)
+
+        if len(temp_data) > 0:
+            avg_temp = np.mean(temp_data)
+            temp_margin = max(1, 0.1 * (max(temp_data) - min(temp_data)))  # ±10% or minimum margin
+            ax2.set_ylim(avg_temp - temp_margin, avg_temp + temp_margin)
+
+        ax1.set_xlim(min(time_data), max(time_data))
+        ax2.set_xlim(min(time_data), max(time_data))
 
         plt.pause(0.01)
         time.sleep(SAMPLING_INTERVAL)
