@@ -1,15 +1,13 @@
-# Real-Time AIN Monitor: LabJack T7 + Real Voltage Temp Display
-# Computes AIN1 - AIN0 as the true voltage, converts to temperature, and shows temp in plot legend.
-
 import time
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 from labjack import ljm
 
 # ====== Config ======
 SAMPLING_INTERVAL = 0.2  # seconds (5 Hz)
-PLOT_WINDOW = 30         # seconds of data to display
-VOLTAGE_WINDOW = 0.05  # volts (for voltage plot)
+CSV_VOLTAGE_FILE = 'time_voltage.csv'
+CSV_TEMP_FILE = 'time_temp.csv'
 # =====================
 
 # --- Chebyshev Voltage-to-Temperature Conversion ---
@@ -78,11 +76,17 @@ ax2.legend(loc='upper left')
 plt.tight_layout()
 
 # --- Data Buffers ---
-time_data = []
-real_voltage_data = []
-ain1_data = []
-temp_data = []
 start_time = time.time()
+
+# Open CSV files for real-time writing
+voltage_csv = open(CSV_VOLTAGE_FILE, mode='w', newline='')
+temp_csv = open(CSV_TEMP_FILE, mode='w', newline='')
+voltage_writer = csv.writer(voltage_csv)
+temp_writer = csv.writer(temp_csv)
+
+# Write CSV headers
+voltage_writer.writerow(["Time (s)", "Real Voltage (V)", "AIN1 (V)"])
+temp_writer.writerow(["Time (s)", "Temperature (K)"])
 
 try:
     while True:
@@ -97,30 +101,16 @@ try:
         except Exception:
             temp_kelvin = np.nan  # Handle invalid voltage for temperature conversion
 
-        # Append data
-        time_data.append(now)
-        real_voltage_data.append(real_voltage)
-        ain1_data.append(ain1)
-        temp_data.append(temp_kelvin)
-
-        # Trim old data
-        while time_data and (now - time_data[0]) > PLOT_WINDOW:
-            time_data.pop(0)
-            real_voltage_data.pop(0)
-            ain1_data.pop(0)
-            temp_data.pop(0)
+        # Write data to CSV in real-time
+        voltage_writer.writerow([now, real_voltage, ain1])
+        temp_writer.writerow([now, temp_kelvin])
 
         # Update plots
-        line_voltage.set_data(time_data, real_voltage_data)
-        line_ain1.set_data(time_data, ain1_data)
-        line_temp.set_data(time_data, temp_data)
+        ax1.set_xlim(0, now)  # Autoscale x-axis based on recording time
+        ax2.set_xlim(0, now)
 
-        # Adjust axes
-        avg_voltage = np.mean(real_voltage_data) if real_voltage_data else 0
-        ax1.set_xlim(max(0, now - PLOT_WINDOW), now)
-        ax1.set_ylim(avg_voltage - VOLTAGE_WINDOW, avg_voltage + VOLTAGE_WINDOW)
-        ax2.set_xlim(max(0, now - PLOT_WINDOW), now)
-        ax2.set_ylim(min(temp_data) - 10 if temp_data else 0, max(temp_data) + 10 if temp_data else 100)
+        line_voltage.set_xdata(np.append(line_voltage.get_xdata(), now))
+        line_voltage.set_ydata(np.append(line_voltage.get_ydata(), real_voltage))
 
         plt.pause(0.01)
         time.sleep(SAMPLING_INTERVAL)
@@ -129,7 +119,10 @@ except KeyboardInterrupt:
     print("\nStopped by user.")
 
 finally:
+    # Close LabJack handle and CSV files
     ljm.close(handle)
+    voltage_csv.close()
+    temp_csv.close()
     plt.ioff()
     plt.show()
-    print("LabJack handle closed.")
+    print("LabJack handle closed. Data saved to CSV files.")

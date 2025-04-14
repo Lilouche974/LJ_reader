@@ -31,4 +31,8 @@ def cheb_eq(Zv):
         a6 * np.cos(6 * acos_k)
     )
 
-print(cheb_eq(2.8625))  # Example usage of the function
+print('Voltage to Temperature Calculator')
+print('============================')
+
+v_input = float(input('Enter voltage value (in volts): '))
+print(cheb_eq(v_input))
